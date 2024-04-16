@@ -1,7 +1,5 @@
-import requests
+import requests 
 from bs4 import BeautifulSoup 
-from collections import defaultdict
-from operator import itemgetter
 import pandas as pd
 import sqlite3
 import numpy as np
@@ -26,43 +24,29 @@ if response.status_code == 200:
     data_rows = table.find_all('tr')[2:12]
     top_10_countries_data = [extract_row_data(row) for row in data_rows]
 
-    top_10_cases_df = pd.DataFrame(top_10_countries_data, columns=['Country', 'Total Cases', 'Total Deaths', 'Total Recovered'])
+    top_10_cases_df = pd.DataFrame(top_10_countries_data, columns=['country', 'total_cases', 'total_deaths', 'total_recovered'])
 
-    death_table = soup.find('table')
+    top_10_cases_df.to_csv('top_10_cases.csv', index=False)
 
-    death_data_rows = death_table.find_all('tr')[2:12]
-    top_10_death_data = [extract_row_data(row) for row in death_data_rows]
+    top_10_cases_df = pd.read_csv('top_10_cases.csv')
 
-    top_10_deaths_df = pd.DataFrame(top_10_death_data, columns=['Country', 'Total Cases', 'Total Deaths', 'Total Recovered'])
+    conn = sqlite3.connect("top_10_cases.csv.db")
+    cur = conn.cursor()
 
-    top_10_cases_df['Type'] = 'Cases'
-    top_10_deaths_df['Type'] = 'Deaths'
-
-    combined_df = pd.concat([top_10_cases_df, top_10_deaths_df])
-
-    combined_df.to_csv('top_countries_combined.csv', index=False)
-
-    combined_df = pd.read_csv('top_countries_combined.csv')
-
-    conn = sqlite3.connect('covid_data.db')
-
-    conn.execute("""
+    cur.execute("""
     CREATE TABLE IF NOT EXISTS cases (
     id INTEGER PRIMARY KEY,
     country TEXT,
-    total_cases TEXT,
-    total_deaths TEXT,
-    total_recovered TEXT
+    total_cases TEXT
     );
     """)
 
     conn.commit()
     
-    conn.execute("""
+    cur.execute("""
     CREATE TABLE IF NOT EXISTS deaths (
         id INTEGER PRIMARY KEY,
         country TEXT,
-        total_cases TEXT,
         total_deaths TEXT,
         total_recovered TEXT
     );
@@ -70,55 +54,65 @@ if response.status_code == 200:
 
     conn.commit()
 
-    conn.execute("""
+    cur.execute("""
     UPDATE cases
-    SET `Total Cases` = 0
-    WHERE `Total Cases` IS NULL;
-    """)
-
-    conn.commit()
-
-    conn.execute("""
-    UPDATE cases
-    SET `Total Deaths` = 0
-    WHERE `Total Deaths` IS NULL;
-    """)
-
-    conn.commit()
-
-    conn.execute("""
-    UPDATE cases
-    SET `Total Recovered` = 0
-    WHERE `Total Recovered` IS NULL;
+    SET `total_cases` = 0
+    WHERE `total_cases` IS NULL;
     """)
     
     conn.commit()
 
-    conn.execute("""
+    cur.execute("""
     UPDATE deaths
-    SET `Total Cases` = 0    
-    WHERE `Total Cases` IS NULL;
+    SET `total_deaths` = 0
+    WHERE `total_deaths` IS NULL;
+    """)
+
+    cur.execute("""
+    UPDATE deaths
+    SET `total_recovered` = 0
+    WHERE `total_recovered` IS NULL;
     """)
 
     conn.commit()
 
-    conn.execute("""
-    UPDATE deaths
-    SET `Total Deaths` = 0
-    WHERE `Total Deaths` IS NULL;
-    """)
+    sql_query = "SELECT * FROM cases JOIN deaths ON cases.country = deaths.country"
+    sqlread = pd.read_sql_query(sql_query, conn)
+    print("SQL query result:")
+    print(sqlread)
 
-    conn.commit()
 
-    conn.execute("""
-    UPDATE deaths
-    SET `Total Recovered` = 0
-    WHERE `Total Recovered` IS NULL;
-    """)
+    data_frame = pd.read_csv('combined.csv')
+    
+    # Add print statements to debug
+    print("Data frame after reading from CSV:")
+    print(data_frame)
+    
+    x = data_frame.mean()
+    print(x)
 
-    conn.commit()
+    y = data_frame.median()
+    print(y)
 
-    sqlread = pd.read_sql_query("SELECT * FROM cases INNER JOIN deaths", conn)      
+    def find_modes(data_frame):
+        modes = {}
+        for column in data_frame.columns:
+            mode = data_frame[column].mode()
+            modes[column] = mode.tolist()
+        return modes
+
+    z = find_modes(data_frame)
+    print(z)
+
+    a = data_frame.std()
+    print(a)
+
+    data_frame["total_cases"].plot(kind='bar')
+    plt.show()
+
+else:
+    print("Failed to retrieve data from the website")
+
     sqlread.to_csv('combined.csv', index=False)
 
     data_frame = pd.read_csv('combined.csv')
