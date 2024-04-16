@@ -1,0 +1,149 @@
+import requests
+from bs4 import BeautifulSoup 
+from collections import defaultdict
+from operator import itemgetter
+import pandas as pd
+import sqlite3
+import numpy as np
+import matplotlib.pyplot as plt
+
+url = "https://www.worldometers.info/coronavirus/"
+response = requests.get(url)
+
+if response.status_code == 200:
+    soup = BeautifulSoup(response.content, 'html.parser')
+
+    def extract_row_data(row):
+        columns = row.find_all('td')
+        country = columns[1].text.strip()
+        total_cases = columns[2].text.strip()
+        total_deaths = columns[4].text.strip()
+        total_recovered = columns[6].text.strip()
+        return [country, total_cases, total_deaths, total_recovered]
+
+    table = soup.find('table')
+
+    data_rows = table.find_all('tr')[2:12]
+    top_10_countries_data = [extract_row_data(row) for row in data_rows]
+
+    top_10_cases_df = pd.DataFrame(top_10_countries_data, columns=['Country', 'Total Cases', 'Total Deaths', 'Total Recovered'])
+
+    death_table = soup.find('table')
+
+    death_data_rows = death_table.find_all('tr')[2:12]
+    top_10_death_data = [extract_row_data(row) for row in death_data_rows]
+
+    top_10_deaths_df = pd.DataFrame(top_10_death_data, columns=['Country', 'Total Cases', 'Total Deaths', 'Total Recovered'])
+
+    top_10_cases_df['Type'] = 'Cases'
+    top_10_deaths_df['Type'] = 'Deaths'
+
+    combined_df = pd.concat([top_10_cases_df, top_10_deaths_df])
+
+    combined_df.to_csv('top_countries_combined.csv', index=False)
+
+    combined_df = pd.read_csv('top_countries_combined.csv')
+
+    conn = sqlite3.connect('covid_data.db')
+
+    conn.execute("""
+    CREATE TABLE IF NOT EXISTS cases (
+    id INTEGER PRIMARY KEY,
+    country TEXT,
+    total_cases TEXT,
+    total_deaths TEXT,
+    total_recovered TEXT
+    );
+    """)
+
+    conn.commit()
+    
+    conn.execute("""
+    CREATE TABLE IF NOT EXISTS deaths (
+        id INTEGER PRIMARY KEY,
+        country TEXT,
+        total_cases TEXT,
+        total_deaths TEXT,
+        total_recovered TEXT
+    );
+    """)
+
+    conn.commit()
+
+    conn.execute("""
+    UPDATE cases
+    SET `Total Cases` = 0
+    WHERE `Total Cases` IS NULL;
+    """)
+
+    conn.commit()
+
+    conn.execute("""
+    UPDATE cases
+    SET `Total Deaths` = 0
+    WHERE `Total Deaths` IS NULL;
+    """)
+
+    conn.commit()
+
+    conn.execute("""
+    UPDATE cases
+    SET `Total Recovered` = 0
+    WHERE `Total Recovered` IS NULL;
+    """)
+    
+    conn.commit()
+
+    conn.execute("""
+    UPDATE deaths
+    SET `Total Cases` = 0    
+    WHERE `Total Cases` IS NULL;
+    """)
+
+    conn.commit()
+
+    conn.execute("""
+    UPDATE deaths
+    SET `Total Deaths` = 0
+    WHERE `Total Deaths` IS NULL;
+    """)
+
+    conn.commit()
+
+    conn.execute("""
+    UPDATE deaths
+    SET `Total Recovered` = 0
+    WHERE `Total Recovered` IS NULL;
+    """)
+
+    conn.commit()
+
+    sqlread = pd.read_sql_query("SELECT * FROM cases INNER JOIN deaths", conn)      
+    sqlread.to_csv('combined.csv', index=False)
+
+    data_frame = pd.read_csv('combined.csv')
+    
+    x = data_frame.mean()
+    print(x)
+
+    y = data_frame.median()
+    print(y)
+
+    def find_modes(data_frame):
+        modes = {}
+        for column in data_frame.columns:
+            mode = data_frame[column].mode()
+            modes[column] = mode.tolist()
+        return modes
+
+    z = find_modes(data_frame)
+    print(z)
+
+    a = data_frame.std()
+    print(a)
+
+    data_frame["Total Cases"].plot()
+    plt.show()
+
+else:
+    print("Failed to retrieve data from the website")
